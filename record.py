@@ -81,7 +81,7 @@ _ = subprocess.Popen("adb pull /data/local/" + RAW_GESTURE_OUTPUT_FILENAME, shel
 ## uncompressed --> zip -9  :   3 MB
 ## encode_sparse            :  13 MB
 ## encode_sparse --> zip -9 : 232 KB
-##              mp4 (h.264) : 262 KB
+##                      mp4 : 262 KB
 ## (encode_sparse is lossless and slightly smaller,
 ## but unzip is slower than mpeg decoding, and mp4
 ## can be viewed without unzipping and reconstructing)
