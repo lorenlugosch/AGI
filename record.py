@@ -8,10 +8,19 @@ import mss
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import pandas as pd
+import sys
 
-INPUT_TAS_FILENAME = "timers-and-such/train-real/005360f2-b5ad-4bf5-b21b-ad3e9e06dbf1_prompt-181_0.wav" # the name of the Timers and Such audio file
-OUTPUT_FILENAME = "prompt-181_0"
-PROMPT = "'start timer for 19 seconds'"
+## index=-1
+## let "index += 1"
+## python record.py $index
+csv_index = int(sys.argv[1]) # command line
+print(csv_index)
+
+df = pd.read_csv("timers-and-such/train-real.csv")
+INPUT_TAS_FILENAME = "timers-and-such/" + df.loc[csv_index].path #"timers-and-such/train-real/005360f2-b5ad-4bf5-b21b-ad3e9e06dbf1_prompt-181_0.wav" # the name of the Timers and Such audio file
+OUTPUT_FILENAME = "prompt" + df.loc[csv_index].path.split("_prompt")[1].split(".wav")[0] #"prompt-181_0"
+PROMPT = "'" + df.loc[csv_index].transcription + "'" #"'start timer for 19 seconds'"
 print("PROMPT: " + PROMPT)
 
 # Open adb shell
@@ -108,21 +117,21 @@ wf.writeframes(b''.join(audio_frames))
 wf.close()
 
 # save gesture file
-GESTURE_OUTPUT_FILENAME = OUTPUT_FILENAME + "_gestures.npy"
-for i in range(len(timestamps)):
-    timestamps[i] -= timestamps[0]
-
-import struct
-with open( "prompt-181_0.gestures", "rb" ) as f:
-    FORMAT = '2IHHi'
-    EVENT_SIZE = struct.calcsize(FORMAT)
-    events = []
-    while 1:
-        try:
-            data = f.read(EVENT_SIZE)
-            events.append(struct.unpack(FORMAT,data))
-        except:
-            break
+# GESTURE_OUTPUT_FILENAME = OUTPUT_FILENAME + "_gestures.npy"
+# for i in range(len(timestamps)):
+#     timestamps[i] -= timestamps[0]
+#
+# import struct
+# with open( "prompt-181_0.gestures", "rb" ) as f:
+#     FORMAT = '2IHHi'
+#     EVENT_SIZE = struct.calcsize(FORMAT)
+#     events = []
+#     while 1:
+#         try:
+#             data = f.read(EVENT_SIZE)
+#             events.append(struct.unpack(FORMAT,data))
+#         except:
+#             break
 
 # NOOP = 0; DOWN = 1; UP = 2
 # unaligned_gestures = []
@@ -149,7 +158,7 @@ with open( "prompt-181_0.gestures", "rb" ) as f:
 # gestures = [(NOOP, (-1, -1)) for _ in range(len(screen_frames))]
 
 
-print("Gestures saved to " + GESTURE_OUTPUT_FILENAME)
+print("Gestures saved to " + RAW_GESTURE_OUTPUT_FILENAME)
 print("Audio saved to " + WAVE_OUTPUT_FILENAME)
 print("Screenshots saved to " + SCREEN_OUTPUT_FILENAME)
 
