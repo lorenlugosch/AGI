@@ -76,9 +76,30 @@ adb_shell_process.run_command("kill $GESTURE_RECORD_PID")
 _ = subprocess.Popen("adb pull /data/local/" + RAW_GESTURE_OUTPUT_FILENAME, shell=True)
 
 # save screen file
-SCREEN_OUTPUT_FILENAME = OUTPUT_FILENAME + "_screen.npy"
-vid = np.concatenate(screen_frames).reshape(len(screen_frames), screen_frames[0].shape[0], screen_frames[0].shape[1], screen_frames[0].shape[2])
-np.save(SCREEN_OUTPUT_FILENAME, vid)
+## file sizes for "set timer for 19 seconds":
+## uncompressed             :  74 MB
+## uncompressed --> zip -9  :   3 MB
+## encode_sparse            :  13 MB
+## encode_sparse --> zip -9 : 232 KB
+##              mp4 (h.264) : 262 KB
+## (encode_sparse is lossless and slightly smaller,
+## but unzip is slower than mpeg decoding, and mp4
+## can be viewed without unzipping and reconstructing)
+SCREEN_OUTPUT_FILENAME = OUTPUT_FILENAME + ".mp4"
+FPS = 10.0
+codec = cv2.VideoWriter_fourcc(*"mp4v")
+out = cv2.VideoWriter(SCREEN_OUTPUT_FILENAME, codec, FPS, (300, 630)) #, isColor=True)
+for frame in screen_frames:
+    out.write(frame[:,:,:3]) # last channel not allowed
+out.release()
+## to read:
+# cap = cv2.VideoCapture(SCREEN_OUTPUT_FILENAME)
+# frames = []
+# while(cap.isOpened()):
+#     ret, frame = cap.read()
+#     if not ret: break
+#     frames.append(frame)
+
 
 # save audio file
 wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
@@ -103,29 +124,29 @@ with open( "prompt-181_0.gestures", "rb" ) as f:
         except:
             break
 
-NOOP = 0; DOWN = 1; UP = 2
-unaligned_gestures = []
-i = 0
-while i < len(events):
-    type = DOWN
-    location_x = -1
-    location_y = -1
-    current = events[i]
-    while current[2] != 0:
-        print(current)
-        if current[3] == 53: location_x = current[4]
-        if current[3] == 54: location_y = current[4]
-        if current[4] == -1:
-            type = UP
-            i += 1
-            break
-        i += 1
-        current = events[i]
-    location = (location_x, location_y)
-    timestamp = current[0] + current[1]/1000000
-    unaligned_gestures.append((timestamp, type, location))
-
-gestures = [(NOOP, (-1, -1)) for _ in range(len(screen_frames))]
+# NOOP = 0; DOWN = 1; UP = 2
+# unaligned_gestures = []
+# i = 0
+# while i < len(events):
+#     type = DOWN
+#     location_x = -1
+#     location_y = -1
+#     current = events[i]
+#     while current[2] != 0:
+#         print(current)
+#         if current[3] == 53: location_x = current[4]
+#         if current[3] == 54: location_y = current[4]
+#         if current[4] == -1:
+#             type = UP
+#             i += 1
+#             break
+#         i += 1
+#         current = events[i]
+#     location = (location_x, location_y)
+#     timestamp = current[0] + current[1]/1000000
+#     unaligned_gestures.append((timestamp, type, location))
+#
+# gestures = [(NOOP, (-1, -1)) for _ in range(len(screen_frames))]
 
 
 print("Gestures saved to " + GESTURE_OUTPUT_FILENAME)
@@ -159,28 +180,29 @@ print("Screenshots saved to " + SCREEN_OUTPUT_FILENAME)
 #             cv2.destroyAllWindows()
 #             break
 
-def encode_sparse(screen_frames):
-    diff_indices = []
-    diffs = []
-    first = screen_frames[0]
-    prev = first
-    for frame in screen_frames[1:]:
-        diff_index = np.nonzero(prev != frame)
-        diff = frame[diff_index] - prev[diff_index]
-        diff_indices.append(diff_index)
-        diffs.append(diff)
-        prev = frame
-    return first, diff_indices, diffs
-
-def decode_sparse(encoded_video):
-    first, diff_indices, diffs = encoded_video
-    screen_frames = [first]
-    prev = first
-    for i in range(len(diffs)):
-        frame = prev.copy()
-        diff = diffs[i]
-        diff_index = diff_indices[i]
-        frame[diff_index] = prev[diff_index] + diff
-        screen_frames.append(frame)
-        prev = frame
-    return screen_frames
+# a non-mp4 way to compress:
+# def encode_sparse(screen_frames):
+#     diff_indices = []
+#     diffs = []
+#     first = screen_frames[0]
+#     prev = first
+#     for frame in screen_frames[1:]:
+#         diff_index = np.nonzero(prev != frame)
+#         diff = frame[diff_index] - prev[diff_index]
+#         diff_indices.append(diff_index)
+#         diffs.append(diff)
+#         prev = frame
+#     return first, diff_indices, diffs
+#
+# def decode_sparse(encoded_video):
+#     first, diff_indices, diffs = encoded_video
+#     screen_frames = [first]
+#     prev = first
+#     for i in range(len(diffs)):
+#         frame = prev.copy()
+#         diff = diffs[i]
+#         diff_index = diff_indices[i]
+#         frame[diff_index] = prev[diff_index] + diff
+#         screen_frames.append(frame)
+#         prev = frame
+#     return screen_frames
