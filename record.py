@@ -12,12 +12,13 @@ import pandas as pd
 import sys
 
 ## index=-1
-## let "index += 1"
+## let "index += 1"; echo $index
 ## python record.py $index
 csv_index = int(sys.argv[1]) # command line
 print(csv_index)
 
-df = pd.read_csv("timers-and-such/train-real.csv")
+CSV_FILE = "timers-and-such/train-real.csv"
+df = pd.read_csv(CSV_FILE)
 INPUT_TAS_FILENAME = "timers-and-such/" + df.loc[csv_index].path #"timers-and-such/train-real/005360f2-b5ad-4bf5-b21b-ad3e9e06dbf1_prompt-181_0.wav" # the name of the Timers and Such audio file
 OUTPUT_FILENAME = "prompt" + df.loc[csv_index].path.split("_prompt")[1].split(".wav")[0] #"prompt-181_0"
 PROMPT = "'" + df.loc[csv_index].transcription + "'" #"'start timer for 19 seconds'"
@@ -54,21 +55,21 @@ with mss.mss() as sct:
     emulator_screen = {"top": 120, "left": 900, "width": 300, "height": 750-120}
 
     # start recording microphone (for synchronization purposes)
-    CHUNK = 1600 #CHUNK = 1024;
+    CHUNK = 1600 # = 10 FBANK frames with a shift of 10ms  #CHUNK = 1024;
     FORMAT = pyaudio.paInt16; CHANNELS = 1; RATE = 16000;
-    WAVE_OUTPUT_FILENAME = OUTPUT_FILENAME + ".wav"
+    WAVE_OUTPUT_FILENAME = CSV_FILE.split(".csv")[0] + "/" + OUTPUT_FILENAME + ".wav"
     p = pyaudio.PyAudio(); stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
     print("* recording (hit Enter to stop)")
 
     while not done:
+        # get audio
+        data = stream.read(CHUNK)
+        audio_frames.append(data)
+
         # get screenshot
         # adb_shell_process.run_command("screencap " + str(frame) + ".raw &")
         img = np.array(sct.grab(emulator_screen))
         screen_frames.append(img[::2, ::2])
-
-        # get audio
-        data = stream.read(CHUNK)
-        audio_frames.append(data)
 
         # get gestures (no command, this runs in GESTURE_RECORD_PID)
         #out = gesture_poll_process.stdout.read()
@@ -82,7 +83,9 @@ with mss.mss() as sct:
 
 # stop recording gestures, pull from phone
 adb_shell_process.run_command("kill $GESTURE_RECORD_PID")
-_ = subprocess.Popen("adb pull /data/local/" + RAW_GESTURE_OUTPUT_FILENAME, shell=True)
+subprocess.run("adb pull /data/local/" + RAW_GESTURE_OUTPUT_FILENAME, shell=True)
+subprocess.run("mv " + RAW_GESTURE_OUTPUT_FILENAME + " " + CSV_FILE.split(".csv")[0] + "/" + RAW_GESTURE_OUTPUT_FILENAME, shell=True)
+RAW_GESTURE_OUTPUT_FILENAME = CSV_FILE.split(".csv")[0] + "/" + RAW_GESTURE_OUTPUT_FILENAME
 
 # save screen file
 ## file sizes for "set timer for 19 seconds":
@@ -94,7 +97,7 @@ _ = subprocess.Popen("adb pull /data/local/" + RAW_GESTURE_OUTPUT_FILENAME, shel
 ## (encode_sparse is lossless and slightly smaller,
 ## but unzip is slower than mpeg decoding, and mp4
 ## can be viewed without unzipping and reconstructing)
-SCREEN_OUTPUT_FILENAME = OUTPUT_FILENAME + ".mp4"
+SCREEN_OUTPUT_FILENAME = CSV_FILE.split(".csv")[0] + "/" + OUTPUT_FILENAME + ".mp4"
 FPS = 10.0
 codec = cv2.VideoWriter_fourcc(*"mp4v")
 out = cv2.VideoWriter(SCREEN_OUTPUT_FILENAME, codec, FPS, (300, 630)) #, isColor=True)
@@ -102,19 +105,26 @@ for frame in screen_frames:
     out.write(frame[:,:,:3]) # last channel not allowed
 out.release()
 ## to read:
-# cap = cv2.VideoCapture(SCREEN_OUTPUT_FILENAME)
+# import matplotlib.pyplot as plt
+# import cv2
+# cap = cv2.VideoCapture("timers-and-such/train-real/prompt-181_13.mp4") #(SCREEN_OUTPUT_FILENAME)
 # frames = []
 # while(cap.isOpened()):
 #     ret, frame = cap.read()
 #     if not ret: break
 #     frames.append(frame)
+#
+# plt.imshow(frames[0]); plt.show()
 
+# save timestamps (shouldn't be necessary but)
+TIMESTAMP_OUTPUT_FILENAME = CSV_FILE.split(".csv")[0] + "/" + OUTPUT_FILENAME + "_timestamps.npy"
+np.save(TIMESTAMP_OUTPUT_FILENAME,np.array(timestamps))
 
-# save audio file
-wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
-wf.setnchannels(CHANNELS); wf.setsampwidth(p.get_sample_size(FORMAT)); wf.setframerate(RATE)
-wf.writeframes(b''.join(audio_frames))
-wf.close()
+# # save audio file (no need, but for debugging)
+# wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+# wf.setnchannels(CHANNELS); wf.setsampwidth(p.get_sample_size(FORMAT)); wf.setframerate(RATE)
+# wf.writeframes(b''.join(audio_frames))
+# wf.close()
 
 # save gesture file
 # GESTURE_OUTPUT_FILENAME = OUTPUT_FILENAME + "_gestures.npy"
@@ -159,8 +169,9 @@ wf.close()
 
 
 print("Gestures saved to " + RAW_GESTURE_OUTPUT_FILENAME)
-print("Audio saved to " + WAVE_OUTPUT_FILENAME)
+# print("Audio saved to " + WAVE_OUTPUT_FILENAME)
 print("Screenshots saved to " + SCREEN_OUTPUT_FILENAME)
+print("Timestamps saved to " + TIMESTAMP_OUTPUT_FILENAME)
 
 
 #########
