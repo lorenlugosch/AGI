@@ -1,0 +1,6 @@
+data_folder: /Users/lorenlugosch/AndroidStudioProjects/timers-and-such-backup
+train_csv: with-gestures.csv
+batch_size: 16
+train_dataloader_opts:
+    # num_workers: 2
+    batch_size: !ref <batch_size>
