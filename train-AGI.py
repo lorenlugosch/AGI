@@ -1,3 +1,4 @@
+# python train-AGI.py hparams.yaml --batch_size=2 --data_folder=/home/mila/l/lugoschl/timers-and-such-backup
 import torch
 import speechbrain as sb
 import numpy as np
