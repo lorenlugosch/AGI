@@ -3,19 +3,18 @@ import speechbrain as sb
 import numpy as np
 import sys
 from hyperpyyaml import load_hyperpyyaml
-# import cv2
 import struct
 import torchvision
 
 class AGI(sb.Brain):
 	def compute_forward(self, batch, stage):
 		print(batch.sig[0].shape)
-		print(batch.vid[0].transpose(1,4).shape)
+		print(batch.vid[0].shape)
 		print([len(b) for b in batch.gestures])
-		blah = batch.vid[0].transpose(1,4)[:,0:10,0,0,0]
+		blah = batch.vid[0][:,0:10,0,0,0]
 		return self.modules.model(blah)
 	def compute_objectives(self, predictions, batch, stage):
-		blah = batch.vid[0].transpose(1,4)[:,0:10,0,0,0]
+		blah = batch.vid[0][:,0:10,0,0,0]
 		return torch.nn.functional.l1_loss(predictions, blah)
 	def on_stage_end(self, stage, stage_loss, epoch):
 		print("yay!")
@@ -39,17 +38,7 @@ def prepare_data(hparams):
 	@sb.utils.data_pipeline.provides("vid")
 	def screens_pipeline(screens):
 		video_path = data_folder + "/" + screens
-		# # cv2 version (slower?):
-		# print(video_path)
-		# cap = cv2.VideoCapture(video_path) 
-		# vid = []
-		# while(cap.isOpened()):
-		# 	ret, screen = cap.read()
-		# 	if not ret: break
-		# 	vid.append(torch.tensor(screen))
-		# vid = torch.stack(vid)
-		# vid = vid.transpose(0,3).float() #/ 255.
-		vid = torchvision.io.read_video(video_path)[0].transpose(0,3).float() / 255.
+		vid = torchvision.io.read_video(video_path)[0].float() / 255.
 		return vid
 	sb.dataio.dataset.add_dynamic_item(datasets, screens_pipeline)
 
