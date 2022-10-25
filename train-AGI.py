@@ -6,15 +6,20 @@ from hyperpyyaml import load_hyperpyyaml
 import struct
 import torchvision
 
+conv = torch.nn.Conv2d(in_channels=3, out_channels=128, stride=7, kernel_size=7)
+
 class AGI(sb.Brain):
 	def compute_forward(self, batch, stage):
 		print(batch.sig[0].shape)
-		print(batch.vid[0].shape)
-		print([len(b) for b in batch.gestures])
-		blah = batch.vid[0][:,0:10,0,0,0]
+		vid = batch.vid[0].reshape(-1, 3, 630, 300)
+		print(vid.shape)
+		print(conv(vid).shape)
+		#print(batch.gestures)
+		blah = vid[0:10,0,0,0]
 		return self.modules.model(blah)
 	def compute_objectives(self, predictions, batch, stage):
-		blah = batch.vid[0][:,0:10,0,0,0]
+		vid = batch.vid[0].reshape(-1, 3, 630, 300)
+		blah = vid[0:10,0,0,0]
 		return torch.nn.functional.l1_loss(predictions, blah)
 	def on_stage_end(self, stage, stage_loss, epoch):
 		print("yay!")
@@ -38,7 +43,7 @@ def prepare_data(hparams):
 	@sb.utils.data_pipeline.provides("vid")
 	def screens_pipeline(screens):
 		video_path = data_folder + "/" + screens
-		vid = torchvision.io.read_video(video_path)[0].float() / 255.
+		vid = torchvision.io.read_video(video_path, output_format="TCHW")[0].float() / 255.
 		return vid
 	sb.dataio.dataset.add_dynamic_item(datasets, screens_pipeline)
 
