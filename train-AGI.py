@@ -11,17 +11,14 @@ conv = torch.nn.Conv2d(in_channels=3, out_channels=128, stride=7, kernel_size=7)
 
 class AGI(sb.Brain):
 	def compute_forward(self, batch, stage):
-		print(batch.sig[0].shape)
+		# print(batch.sig[0].shape)
 		vid = batch.vid[0].reshape(-1, 3, 630, 300)
-		print(vid.shape)
-		print(conv(vid).shape)
-		#print(batch.gestures)
-		blah = vid[0:10,0,0,0]
-		return self.modules.model(blah)
+		print(batch.unaligned_gestures[0].shape)
+		print(batch.aligned_gestures[0].shape)
+		return self.modules.conv(vid)
 	def compute_objectives(self, predictions, batch, stage):
 		vid = batch.vid[0].reshape(-1, 3, 630, 300)
-		blah = vid[0:10,0,0,0]
-		return torch.nn.functional.l1_loss(predictions, blah)
+		return torch.nn.functional.l1_loss(predictions, predictions) #blah)
 	def on_stage_end(self, stage, stage_loss, epoch):
 		print("yay!")
 
@@ -50,7 +47,7 @@ def prepare_data(hparams):
 
 	# gestures
 	@sb.utils.data_pipeline.takes("touch_events")
-	@sb.utils.data_pipeline.provides("gestures")
+	@sb.utils.data_pipeline.provides("aligned_gestures", "unaligned_gestures")
 	def gestures_pipeline(touch_events):
 		gesture_path = data_folder + "/" + touch_events
 		FORMAT = '2IHHi'
@@ -64,10 +61,11 @@ def prepare_data(hparams):
 				events.append(struct.unpack(FORMAT,data))
 		gestures = []
 		event_idx = 0
+		g = {"timestamp": -1, "code": -1, "x": -1, "y": -1}
 		while event_idx < len(events):
-			g = {"timestamp": -1, "code": -1, "x": -1, "y": -1} 
+			# g = {"timestamp": -1, "code": -1, "x": -1, "y": -1} 
 			done = False
-			# loop through events until 
+			# loop through events until 0 0 0 encountered
 			while not done:
 				e = events[event_idx]
 				if e[2] == 0:
@@ -78,14 +76,18 @@ def prepare_data(hparams):
 						if g["code"] == -1: # 0 = down, 1 = up, 2 = no op
 							g["code"] = 1 # reserve -1 for "no label"
 					if e[3] == 53:
-						g["x"] = e[4]
+						g["x"] = e[4] / 32768. # == 2**15 because signed 2-byte int
 					if e[3] == 54:
-						g["y"] = e[4]
+						g["y"] = e[4] / 32768.
 				event_idx += 1
 			if done:
 				timestamp = e[0] + e[1]/1000000
 				g["timestamp"] = timestamp
-				gestures.append(g)
+				g_ = g.copy()
+				if g_["code"] == 1:
+					g_["x"] = -1
+					g_["y"] = -1
+				gestures.append(g_)
 		#
 		timestamp_path = gesture_path.replace(".gestures", "_timestamps.npy")
 		timestamps = np.load(timestamp_path)
@@ -99,12 +101,27 @@ def prepare_data(hparams):
 					frame.append(g)
 			t_prev = t
 			frames.append(frame)
-		return frames 
+		# return frames 
+		#
+		aligned_gestures = []
+		unaligned_gestures = []
+		NULL_ = [0, -1, -1, -1]
+		# label: [1, 0/1, x, y]
+		for frame in frames:
+			for gesture in frame:
+				label = [gesture["code"], gesture["x"], gesture["y"]]
+				unaligned_gestures.append(label)
+				aligned_gestures.append([1] + label)
+			aligned_gestures.append(NULL_) # must transition to next timestep for each frame
+		unaligned_gestures = torch.tensor(unaligned_gestures)
+		aligned_gestures = torch.tensor(aligned_gestures)
+		yield aligned_gestures
+		yield unaligned_gestures
 	sb.dataio.dataset.add_dynamic_item(datasets, gestures_pipeline)
 
 	sb.dataio.dataset.set_output_keys(
 		datasets,
-		["id", "sig", "vid", "gestures"]
+		["id", "sig", "vid", "aligned_gestures", "unaligned_gestures"]
 	)
 	return train_data
 
@@ -114,7 +131,8 @@ with open(hparams_file) as fin:
 	hparams = load_hyperpyyaml(fin, overrides)
 train_data = prepare_data(hparams)
 
-modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
+# modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
+modules = {"conv": conv }
 brain = AGI(modules, lambda x : torch.optim.SGD(x, 0.1) )
 # data = [{"input": np.random.rand(10 , 10).astype("float32") , "target": np.random.rand(10, 10).astype("float32") }]
 brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
