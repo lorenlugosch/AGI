@@ -7,8 +7,6 @@ from hyperpyyaml import load_hyperpyyaml
 import struct
 import torchvision
 
-# conv = torch.nn.Conv2d(in_channels=3, out_channels=128, stride=7, kernel_size=7)
-
 encoder_dim = 1024
 predictor_dim = 1024
 joiner_dim = 1024
@@ -86,6 +84,31 @@ class Joiner(torch.nn.Module):
 		return out
 
 class AGI(sb.Brain):
+	def compute_aligned_features(self, encoder_out, predictor_out, aligned_gestures):
+		batch_size = encoder_out.shape[0]
+		T = encoder_out.shape[1]
+		aligned_encoder_out = []
+		aligned_predictor_out = []
+		for b in range(batch_size):
+			t = 0; u = 0
+			t_u_indices = []
+			for step in aligned_gestures[b, :, 0]:
+				t_u_indices.append((t,u))
+				if int(step.item()) == 0: # right (null)
+					t += 1
+				if int(step.item()) == 1: # down (label)
+					u += 1
+			# t_u_indices.append((T-1,U))
+			t_indices = [min(t,T-1) for (t,u) in t_u_indices]
+			u_indices = [u for (t,u) in t_u_indices]
+			encoder_out_expanded = encoder_out[b, t_indices]
+			predictor_out_expanded = predictor_out[b, u_indices]
+			aligned_encoder_out.append(encoder_out_expanded)
+			aligned_predictor_out.append(predictor_out_expanded)
+		aligned_encoder_out = torch.stack(aligned_encoder_out)
+		aligned_predictor_out = torch.stack(aligned_predictor_out)
+		return aligned_encoder_out, aligned_predictor_out
+
 	def compute_forward(self, batch, stage):
 		batch = batch.to(self.device)
 		video = batch.vid[0]
@@ -101,12 +124,17 @@ class AGI(sb.Brain):
 		predictor_out = self.modules.predictor(unaligned_gestures_in)
 		
 		aligned_gestures = batch.aligned_gestures[0]
-		
+		aligned_encoder_out, aligned_predictor_out = self.compute_aligned_features(encoder_out, predictor_out, aligned_gestures)
+		joiner_out = self.modules.joiner(aligned_encoder_out, aligned_predictor_out)
 		return joiner_out
 
 	def compute_objectives(self, predictions, batch, stage):
 		joiner_out = predictions
-		return torch.nn.functional.l1_loss(joiner_out, joiner_out)
+		aligned_gestures = batch.aligned_gestures[0]
+		mask = (aligned_gestures != -1)
+		transition_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,0], target=aligned_gestures[:,:,0], reduction="none")
+		emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,1:], target=aligned_gestures[:,:,1:], reduction="none") * mask[:,:,1:]
+		return transition_losses.sum() + emission_losses.sum()
 
 	def on_stage_end(self, stage, stage_loss, epoch):
 		print("yay!")
