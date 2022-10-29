@@ -110,7 +110,7 @@ class AGI(sb.Brain):
 
 	def compute_forward(self, batch, stage):
 		batch = batch.to(self.device)
-		video = batch.vid[0]
+		video = batch.vid[0].float() / 255.
 		audio,audio_lens = batch.sig
 		audio = self.hparams.compute_features(audio)
 		audio = self.modules.normalize(audio,audio_lens)
@@ -131,8 +131,8 @@ class AGI(sb.Brain):
 		joiner_out = predictions
 		aligned_gestures = batch.aligned_gestures[0]
 		mask = (aligned_gestures != -1)
-		print(aligned_gestures[0,:,0])
-		print(joiner_out[0,:,0].sigmoid())
+		print(aligned_gestures[0,:,0].long())
+		print((joiner_out[0,:,0] > 0).long())
 		transition_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,0], target=aligned_gestures[:,:,0], reduction="none")
 		emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,1:], target=aligned_gestures[:,:,1:], reduction="none") * mask[:,:,1:]
 		return transition_losses.sum() + emission_losses.sum()
@@ -158,7 +158,7 @@ def prepare_data(hparams):
 	@sb.utils.data_pipeline.takes("screens")
 	@sb.utils.data_pipeline.provides("vid")
 	def screens_pipeline(screens):
-		vid = torchvision.io.read_video(data_folder + "/" + screens, output_format="TCHW")[0].float() / 255.
+		vid = torchvision.io.read_video(data_folder + "/" + screens, output_format="TCHW")[0]
 		return vid
 	sb.dataio.dataset.add_dynamic_item(datasets, screens_pipeline)
 
