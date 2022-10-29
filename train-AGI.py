@@ -45,7 +45,6 @@ class Encoder(torch.nn.Module):
 class Predictor(torch.nn.Module):
 	def __init__(self, output_dim):
 		super(Predictor, self).__init__()
-		# self.embed = torch.nn.Embedding(output_dim, predictor_dim)
 		self.embed = torch.nn.Linear(output_dim, predictor_dim)
 		self.rnn = torch.nn.LSTMCell(input_size=predictor_dim, hidden_size=predictor_dim)
 		self.linear = torch.nn.Linear(predictor_dim, joiner_dim)
@@ -65,7 +64,7 @@ class Predictor(torch.nn.Module):
 		outs = []
 		state = (torch.stack([self.initial_state_h] * batch_size), #.to(y.device)
 				torch.stack([self.initial_state_c] * batch_size))
-		for u in range(U): # need U+1 to get null output for final timestep 			
+		for u in range(U): # need U+1 to get null output for final timestep
 			decoder_input = y[:,u-1]
 			out, state = self.forward_one_step(decoder_input, state)
 			outs.append(out)
@@ -119,10 +118,10 @@ class AGI(sb.Brain):
 
 		unaligned_gestures = batch.unaligned_gestures[0]
 		batch_size = unaligned_gestures.shape[0]
-		start_pad = torch.stack([self.modules.predictor.start_token] * batch_size).unsqueeze(1)
+		start_pad = torch.stack([self.modules.predictor.start_token] * batch_size).unsqueeze(1).to(self.device)
 		unaligned_gestures_in = torch.cat([start_pad, unaligned_gestures], dim=1)
 		predictor_out = self.modules.predictor(unaligned_gestures_in)
-		
+
 		aligned_gestures = batch.aligned_gestures[0]
 		aligned_encoder_out, aligned_predictor_out = self.compute_aligned_features(encoder_out, predictor_out, aligned_gestures)
 		joiner_out = self.modules.joiner(aligned_encoder_out, aligned_predictor_out)
@@ -132,6 +131,8 @@ class AGI(sb.Brain):
 		joiner_out = predictions
 		aligned_gestures = batch.aligned_gestures[0]
 		mask = (aligned_gestures != -1)
+		print(aligned_gestures[0,:,0])
+		print(joiner_out[0,:,0].sigmoid())
 		transition_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,0], target=aligned_gestures[:,:,0], reduction="none")
 		emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,1:], target=aligned_gestures[:,:,1:], reduction="none") * mask[:,:,1:]
 		return transition_losses.sum() + emission_losses.sum()
@@ -152,7 +153,7 @@ def prepare_data(hparams):
 		sig = sb.dataio.dataio.read_audio(data_folder + "/" + wav)
 		return sig
 	sb.dataio.dataset.add_dynamic_item(datasets, audio_pipeline)
-	
+
 	# screen
 	@sb.utils.data_pipeline.takes("screens")
 	@sb.utils.data_pipeline.provides("vid")
@@ -179,7 +180,7 @@ def prepare_data(hparams):
 		event_idx = 0
 		g = {"timestamp": -1, "code": -1, "x": -1, "y": -1}
 		while event_idx < len(events):
-			# g = {"timestamp": -1, "code": -1, "x": -1, "y": -1} 
+			# g = {"timestamp": -1, "code": -1, "x": -1, "y": -1}
 			done = False
 			# loop through events until 0 0 0 encountered
 			while not done:
@@ -217,7 +218,7 @@ def prepare_data(hparams):
 					frame.append(g)
 			t_prev = t
 			frames.append(frame)
-		# return frames 
+		# return frames
 		#
 		aligned_gestures = []
 		unaligned_gestures = []
@@ -249,7 +250,7 @@ train_data = prepare_data(hparams)
 
 # modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
 modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
-brain = AGI(modules, lambda x: torch.optim.SGD(x, 0.1), hparams=hparams)
+brain = AGI(modules, lambda x: torch.optim.SGD(x, 0.1), hparams=hparams, run_opts=run_opts)
 brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
 
 
