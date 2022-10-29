@@ -49,27 +49,26 @@ class Predictor(torch.nn.Module):
 		super(Predictor, self).__init__()
 		# self.embed = torch.nn.Embedding(output_dim, predictor_dim)
 		self.embed = torch.nn.Linear(output_dim, predictor_dim)
-		self.rnn = torch.nn.GRUCell(input_size=predictor_dim, hidden_size=predictor_dim)
+		self.rnn = torch.nn.LSTMCell(input_size=predictor_dim, hidden_size=predictor_dim)
 		self.linear = torch.nn.Linear(predictor_dim, joiner_dim)
-		self.initial_state = torch.nn.Parameter(torch.randn(predictor_dim))
+		self.initial_state_h = torch.nn.Parameter(torch.randn(predictor_dim))
+		self.initial_state_c = torch.nn.Parameter(torch.randn(predictor_dim))
 		self.start_token = torch.tensor([-1, -1, -1.])
 
 	def forward_one_step(self, input, previous_state):
 		embedding = self.embed(input)
 		state = self.rnn.forward(embedding, previous_state)
-		out = self.linear(state)
+		out = self.linear(state[0])
 		return out, state
 
 	def forward(self, y):
 		batch_size = y.shape[0]
 		U = y.shape[1]
 		outs = []
-		state = torch.stack([self.initial_state] * batch_size) #.to(y.device)
-		for u in range(U+1): # need U+1 to get null output for final timestep 
-			if u == 0:
-				decoder_input = torch.stack([self.start_token] * batch_size) #.to(y.device)
-			else:
-				decoder_input = y[:,u-1]
+		state = (torch.stack([self.initial_state_h] * batch_size), #.to(y.device)
+				torch.stack([self.initial_state_c] * batch_size))
+		for u in range(U): # need U+1 to get null output for final timestep 			
+			decoder_input = y[:,u-1]
 			out, state = self.forward_one_step(decoder_input, state)
 			outs.append(out)
 		out = torch.stack(outs, dim=1)
@@ -97,11 +96,12 @@ class AGI(sb.Brain):
 
 		unaligned_gestures = batch.unaligned_gestures[0]
 		batch_size = unaligned_gestures.shape[0]
-		# start_pad = torch.stack([self.modules.predictor.start_token] * batch_size).unsqueeze(1)
-		# unaligned_gestures_in = torch.cat([start_pad, unaligned_gestures], dim=1)
-		predictor_out = self.modules.predictor(unaligned_gestures)
-
+		start_pad = torch.stack([self.modules.predictor.start_token] * batch_size).unsqueeze(1)
+		unaligned_gestures_in = torch.cat([start_pad, unaligned_gestures], dim=1)
+		predictor_out = self.modules.predictor(unaligned_gestures_in)
+		
 		aligned_gestures = batch.aligned_gestures[0]
+		
 		return joiner_out
 
 	def compute_objectives(self, predictions, batch, stage):
