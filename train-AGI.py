@@ -250,7 +250,7 @@ train_data = prepare_data(hparams)
 
 # modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
 modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
-brain = AGI(modules, lambda x: torch.optim.SGD(x, 0.1), hparams=hparams, run_opts=run_opts)
+brain = AGI(modules, lambda x: torch.optim.Adam(x, 3e-4), hparams=hparams, run_opts=run_opts)
 brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
 
 
