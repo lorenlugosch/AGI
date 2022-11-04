@@ -11,7 +11,8 @@ encoder_dim = 1024
 predictor_dim = 1024
 joiner_dim = 1024
 audio_dim = 80
-audio_frames_per_video_frame = 10
+audio_frames_per_video_frame = 10 #4
+#mctct
 
 # adapted from https://github.com/lorenlugosch/transducer-tutorial/blob/main/transducer_tutorial_example.ipynb
 class Encoder(torch.nn.Module):
@@ -130,12 +131,22 @@ class AGI(sb.Brain):
 	def compute_objectives(self, predictions, batch, stage):
 		joiner_out = predictions
 		aligned_gestures = batch.aligned_gestures[0]
+		batch_size = joiner_out.shape[0]
+
+		# fix padding - should be -1 instead of 0
+		zeros = aligned_gestures[:,:,2:] == 0. # x,y will never be 0
+		aligned_gestures[:,:,2:][zeros] = -1
+		aligned_gestures[:,:,1][zeros.prod(2).bool()] = -1
+		aligned_gestures[:,:,0][zeros.prod(2).bool()] = -1
+
 		mask = (aligned_gestures != -1)
-		print(aligned_gestures[0,:,0].long())
-		print((joiner_out[0,:,0] > 0).long())
-		transition_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,0], target=aligned_gestures[:,:,0], reduction="none")
-		emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,1:], target=aligned_gestures[:,:,1:], reduction="none") * mask[:,:,1:]
-		return transition_losses.sum() + emission_losses.sum()
+		transition_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,0], target=aligned_gestures[:,:,0], reduction="none") * mask[:,:,0]
+		type_emission_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,1], target=aligned_gestures[:,:,1], reduction="none") * mask[:,:,1]
+		location_emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,2:], target=aligned_gestures[:,:,2:], reduction="none") * mask[:,:,2:]
+
+		transition_accuracy = (mask[:,:,0]*(aligned_gestures[:,:,0].long() == (joiner_out[:,:,0] > 0).long())).sum()/mask[:,:,0].sum()
+		print("transition accuracy: %f" % transition_accuracy)
+		return (transition_losses.sum() + type_emission_losses.sum() + location_emission_losses.sum()) / batch_size
 
 	def on_stage_end(self, stage, stage_loss, epoch):
 		print("yay!")
@@ -218,7 +229,7 @@ def prepare_data(hparams):
 					frame.append(g)
 			t_prev = t
 			frames.append(frame)
-		# return frames
+		# print(frames)
 		#
 		aligned_gestures = []
 		unaligned_gestures = []
@@ -252,5 +263,5 @@ train_data = prepare_data(hparams)
 modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
 brain = AGI(modules, lambda x: torch.optim.Adam(x, 3e-4), hparams=hparams, run_opts=run_opts)
 brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
-
+#brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
 
