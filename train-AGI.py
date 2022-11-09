@@ -14,6 +14,27 @@ audio_dim = 80
 audio_frames_per_video_frame = 10 #4
 #mctct
 
+def greedy_search(self, x, T, encoder, predictor, joiner):
+	y_batch = []
+	B = x.shape[0]; T = x.shape[1]
+	encoder_out = encoder.forward(x)
+	for b in range(B):
+		t = 0; u = 0; y = [predictor.start_symbol]; predictor_state = (predictor.initial_state_h.unsqueeze(0), predictor.initial_state_c.unsqueeze(0))
+		U_max = T * 2
+		while t < T and u < U_max:
+			predictor_input = torch.tensor([ y[-1] ]).to(x.device)
+			g_u, predictor_state = predictor.forward_one_step(predictor_input, predictor_state)
+			f_t = encoder_out[b, t]
+			h_t_u = joiner.forward(f_t, g_u)
+			argmax = h_t_u.max(-1)[1].item()
+			if argmax == NULL_INDEX:
+				t += 1
+			else: # argmax == a label
+				u += 1
+			y.append(argmax)
+		y_batch.append(y[1:]) # remove start symbol
+	return y_batch
+
 # adapted from https://github.com/lorenlugosch/transducer-tutorial/blob/main/transducer_tutorial_example.ipynb
 class Encoder(torch.nn.Module):
 	def __init__(self):
