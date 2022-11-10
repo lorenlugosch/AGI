@@ -14,24 +14,31 @@ audio_dim = 80
 audio_frames_per_video_frame = 10 #4
 #mctct
 
-def greedy_search(self, x, T, encoder, predictor, joiner):
+def greedy_search(encoder_out, predictor, joiner):
 	y_batch = []
-	B = x.shape[0]; T = x.shape[1]
-	encoder_out = encoder.forward(x)
+	B = encoder_out.shape[0]; T = encoder_out.shape[1]
 	for b in range(B):
-		t = 0; u = 0; y = [predictor.start_symbol]; predictor_state = (predictor.initial_state_h.unsqueeze(0), predictor.initial_state_c.unsqueeze(0))
+		t = 0; u = 0; y = [predictor.start_token]; predictor_state = (predictor.initial_state_h.unsqueeze(0), predictor.initial_state_c.unsqueeze(0))
 		U_max = T * 2
 		while t < T and u < U_max:
-			predictor_input = torch.tensor([ y[-1] ]).to(x.device)
+			print(y[-1])
+			predictor_input = y[-1].unsqueeze(0).to(encoder_out.device)
 			g_u, predictor_state = predictor.forward_one_step(predictor_input, predictor_state)
 			f_t = encoder_out[b, t]
 			h_t_u = joiner.forward(f_t, g_u)
-			argmax = h_t_u.max(-1)[1].item()
-			if argmax == NULL_INDEX:
+			transition = h_t_u[0,0].item() < 0.
+			if transition:
 				t += 1
 			else: # argmax == a label
 				u += 1
-			y.append(argmax)
+				DOWN = h_t_u[0,1].item() < 0
+				y_u = torch.tensor([
+					not DOWN,
+					h_t_u[0,2].item() if DOWN else -1.,
+					h_t_u[0,3].item() if DOWN else -1.
+				])
+				print(h_t_u); print(y_u); sys.exit()
+				y.append(y_u)
 		y_batch.append(y[1:]) # remove start symbol
 	return y_batch
 
@@ -137,6 +144,8 @@ class AGI(sb.Brain):
 		audio = self.hparams.compute_features(audio)
 		audio = self.modules.normalize(audio,audio_lens)
 		encoder_out = self.modules.encoder(audio,video)
+
+		greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
 
 		unaligned_gestures = batch.unaligned_gestures[0]
 		batch_size = unaligned_gestures.shape[0]
@@ -283,6 +292,7 @@ train_data = prepare_data(hparams)
 # modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
 modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
 brain = AGI(modules, lambda x: torch.optim.Adam(x, 3e-4), hparams=hparams, run_opts=run_opts)
+brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
 brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
 #brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
 
