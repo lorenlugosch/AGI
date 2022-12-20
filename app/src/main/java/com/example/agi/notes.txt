@@ -1,0 +1,217 @@
+running `adb shell getevent -l`,
+tapping the "5" on the calculator app:
+
+touching:
+/dev/input/event2: EV_ABS       ABS_MT_TRACKING_ID   00000000
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003238
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    000049c5
+/dev/input/event2: EV_ABS       ABS_MT_PRESSURE      00000400
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+releasing:
+/dev/input/event2: EV_ABS       ABS_MT_PRESSURE      00000000
+/dev/input/event2: EV_ABS       ABS_MT_TRACKING_ID   ffffffff
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+want: script to translate ^events to sendevent commands:
+
+Physical size: 1440x2960
+
+adb shell getevent -il /dev/input/event2 | grep ABS_MT_POSITION
+ --> 32767 x 32767
+
+12856 * 1440 / 32767 = 565
+18885 * 2960 / 32767 = 1706
+
+adb shell sendevent /dev/input/event2 3 57 0
+adb shell sendevent /dev/input/event2 3 53 5650
+adb shell sendevent /dev/input/event2 3 54 17060
+adb shell sendevent /dev/input/event2 3 58 1024 # pressure has to be non-zero
+adb shell sendevent /dev/input/event2 0 0 0
+
+adb shell sendevent /dev/input/event2 3 57 -1
+adb shell sendevent /dev/input/event2 0 0 0
+
+note: if x or y does not change between events,
+it will not be logged
+
+################
+touching the "5", then dragging to "6" and releasing:
+
+touch:
+/dev/input/event2: EV_ABS       ABS_MT_TRACKING_ID   00000000
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00002f1c
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004b48
+/dev/input/event2: EV_ABS       ABS_MT_PRESSURE      00000400
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+drag:
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00002f8d
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00002fff
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000030e3
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003154
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000031c6
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003238
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000331c
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000033a4
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003416
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004b11
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003488
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000034f9
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000035dd
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000364f
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003732
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003816
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004ada
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003888
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000038f9
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000396b
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000039dd
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003a4f
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003b32
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004aa2
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003c16
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003c88
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003ddd
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00003e4f
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004016
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004088
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000416b
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000041dd
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000424f
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000042c0
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004332
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004a6b
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000043a4
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000449e
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004510
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004582
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000045f4
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004665
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00004a34
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000046d7
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004749
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000047bb
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000482c
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004910
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    000049f4
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004ad7
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    000049fc
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004bbb
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004d82
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    000049c5
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004e65
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    0000498d
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004ed7
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004f49
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+/dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00004fbb
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
+
+release:
+/dev/input/event2: EV_ABS       ABS_MT_PRESSURE      00000000
+/dev/input/event2: EV_ABS       ABS_MT_TRACKING_ID   ffffffff
+/dev/input/event2: EV_SYN       SYN_REPORT           00000000
