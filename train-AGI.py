@@ -21,7 +21,6 @@ def greedy_search(encoder_out, predictor, joiner):
 		t = 0; u = 0; y = [predictor.start_token]; predictor_state = (predictor.initial_state_h.unsqueeze(0), predictor.initial_state_c.unsqueeze(0))
 		U_max = T * 2
 		while t < T and u < U_max:
-			print(y[-1])
 			predictor_input = y[-1].unsqueeze(0).to(encoder_out.device)
 			g_u, predictor_state = predictor.forward_one_step(predictor_input, predictor_state)
 			f_t = encoder_out[b, t]
@@ -31,14 +30,15 @@ def greedy_search(encoder_out, predictor, joiner):
 				t += 1
 			else: # argmax == a label
 				u += 1
-				DOWN = h_t_u[0,1].item() < 0
+				DOWN = h_t_u[0,1].item() > 0 # should be < 0? something wrong
 				y_u = torch.tensor([
 					not DOWN,
 					h_t_u[0,2].item() if DOWN else -1.,
 					h_t_u[0,3].item() if DOWN else -1.
 				])
-				print(h_t_u); print(y_u); sys.exit()
+				if b == 0: print(t); print(DOWN); print(h_t_u);
 				y.append(y_u)
+		print(y)
 		y_batch.append(y[1:]) # remove start symbol
 	return y_batch
 
@@ -145,7 +145,9 @@ class AGI(sb.Brain):
 		audio = self.modules.normalize(audio,audio_lens)
 		encoder_out = self.modules.encoder(audio,video)
 
+		#print(batch.unaligned_gestures[0][0])
 		greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
+		#sys.exit()
 
 		unaligned_gestures = batch.unaligned_gestures[0]
 		batch_size = unaligned_gestures.shape[0]
@@ -174,6 +176,10 @@ class AGI(sb.Brain):
 		type_emission_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,1], target=aligned_gestures[:,:,1], reduction="none") * mask[:,:,1]
 		location_emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,2:], target=aligned_gestures[:,:,2:], reduction="none") * mask[:,:,2:]
 
+		print(joiner_out[0,:,1][mask[0,:,1]])
+		print(aligned_gestures[0,:,1].long()[mask[0,:,1]])
+		type_emission_accuracy = (mask[:,:,1]*(aligned_gestures[:,:,1].long() == (joiner_out[:,:,1] > 0).long())).sum()/mask[:,:,1].sum()
+		print("type emission accuracy: %f" % type_emission_accuracy)
 		transition_accuracy = (mask[:,:,0]*(aligned_gestures[:,:,0].long() == (joiner_out[:,:,0] > 0).long())).sum()/mask[:,:,0].sum()
 		print("transition accuracy: %f" % transition_accuracy)
 		return (transition_losses.sum() + type_emission_losses.sum() + location_emission_losses.sum()) / batch_size
