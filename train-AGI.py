@@ -1,4 +1,4 @@
-# python train-AGI.py hparams.yaml --batch_size=2 --data_folder=/home/mila/l/lugoschl/timers-and-such-backup
+# python train-AGI.py hparams.yaml --batch_size=2 --output_folder=<whatever>
 import torch
 import speechbrain as sb
 import numpy as np
@@ -7,11 +7,11 @@ from hyperpyyaml import load_hyperpyyaml
 import struct
 import torchvision
 
-encoder_dim = 1024
-predictor_dim = 1024
-joiner_dim = 1024
-audio_dim = 80
-audio_frames_per_video_frame = 10 #4
+#encoder_dim = 1024
+#predictor_dim = 1024
+#joiner_dim = 1024
+#audio_dim = 80
+#audio_frames_per_video_frame = 10 #4
 #mctct
 
 def greedy_search(encoder_out, predictor, joiner):
@@ -30,7 +30,8 @@ def greedy_search(encoder_out, predictor, joiner):
 				t += 1
 			else: # argmax == a label
 				u += 1
-				DOWN = h_t_u[0,1].item() > 0 # should be < 0? something wrong
+				#DOWN = h_t_u[0,1].item() > 0 # should be < 0? something wrong
+				DOWN = h_t_u[0,1].item() < 0
 				y_u = torch.tensor([
 					not DOWN,
 					h_t_u[0,2].item() if DOWN else -1.,
@@ -38,78 +39,9 @@ def greedy_search(encoder_out, predictor, joiner):
 				])
 				if b == 0: print(t); print(DOWN); print(h_t_u);
 				y.append(y_u)
-		print(y)
+		#print(y)
 		y_batch.append(y[1:]) # remove start symbol
 	return y_batch
-
-# adapted from https://github.com/lorenlugosch/transducer-tutorial/blob/main/transducer_tutorial_example.ipynb
-class Encoder(torch.nn.Module):
-	def __init__(self):
-		super(Encoder, self).__init__()
-		self.combine = torch.nn.Linear(audio_dim*audio_frames_per_video_frame + 128, encoder_dim)
-		# self.audio_encoder = 
-		self.video_encoder = torch.nn.Conv2d(in_channels=3, out_channels=128, stride=7, kernel_size=7)
-		self.rnn = torch.nn.LSTM(input_size=encoder_dim, hidden_size=encoder_dim, num_layers=3, batch_first=True, bidirectional=False, dropout=0.15)
-		self.linear = torch.nn.Linear(encoder_dim, joiner_dim)
-
-	def forward(self, audio,video):
-		batch_size = video.shape[0]
-		video_T = video.shape[1]
-		audio_features = audio #self.audio_encoder(audio)
-		audio_T = audio_features.shape[1]
-		pad_ = (video_T*audio_frames_per_video_frame) - audio_T
-		audio_features = torch.nn.functional.pad(audio_features, (0,0,0,pad_))
-		audio_features = audio_features.reshape(batch_size, video_T, audio_dim*audio_frames_per_video_frame)
-
-		video = video.reshape(-1, 3, 630, 300)
-		video_features = self.video_encoder(video)
-		video_features = video_features.max(dim=2)[0].max(dim=2)[0]
-		video_features = video_features.reshape(batch_size, video_T, 128)
-		out = torch.cat([audio_features, video_features], dim=2)
-		out = self.combine(out)
-		out = self.rnn(out)[0]
-		out = self.linear(out)
-		return out
-
-class Predictor(torch.nn.Module):
-	def __init__(self, output_dim):
-		super(Predictor, self).__init__()
-		self.embed = torch.nn.Linear(output_dim, predictor_dim)
-		self.rnn = torch.nn.LSTMCell(input_size=predictor_dim, hidden_size=predictor_dim)
-		self.linear = torch.nn.Linear(predictor_dim, joiner_dim)
-		self.initial_state_h = torch.nn.Parameter(torch.randn(predictor_dim))
-		self.initial_state_c = torch.nn.Parameter(torch.randn(predictor_dim))
-		self.start_token = torch.tensor([-1, -1, -1.])
-
-	def forward_one_step(self, input, previous_state):
-		embedding = self.embed(input)
-		state = self.rnn.forward(embedding, previous_state)
-		out = self.linear(state[0])
-		return out, state
-
-	def forward(self, y):
-		batch_size = y.shape[0]
-		U = y.shape[1]
-		outs = []
-		state = (torch.stack([self.initial_state_h] * batch_size), #.to(y.device)
-				torch.stack([self.initial_state_c] * batch_size))
-		for u in range(U): # need U+1 to get null output for final timestep
-			decoder_input = y[:,u-1]
-			out, state = self.forward_one_step(decoder_input, state)
-			outs.append(out)
-		out = torch.stack(outs, dim=1)
-		return out
-
-class Joiner(torch.nn.Module):
-	def __init__(self, num_outputs):
-		super(Joiner, self).__init__()
-		self.linear = torch.nn.Linear(joiner_dim, num_outputs)
-
-	def forward(self, encoder_out, predictor_out):
-		out = encoder_out + predictor_out
-		out = torch.nn.functional.relu(out)
-		out = self.linear(out)
-		return out
 
 class AGI(sb.Brain):
 	def compute_aligned_features(self, encoder_out, predictor_out, aligned_gestures):
@@ -146,7 +78,7 @@ class AGI(sb.Brain):
 		encoder_out = self.modules.encoder(audio,video)
 
 		#print(batch.unaligned_gestures[0][0])
-		greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
+		#greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
 		#sys.exit()
 
 		unaligned_gestures = batch.unaligned_gestures[0]
@@ -176,23 +108,67 @@ class AGI(sb.Brain):
 		type_emission_losses = torch.nn.functional.binary_cross_entropy_with_logits(input=joiner_out[:,:,1], target=aligned_gestures[:,:,1], reduction="none") * mask[:,:,1]
 		location_emission_losses = torch.nn.functional.mse_loss(input=joiner_out[:,:,2:], target=aligned_gestures[:,:,2:], reduction="none") * mask[:,:,2:]
 
-		print(joiner_out[0,:,1][mask[0,:,1]])
-		print(aligned_gestures[0,:,1].long()[mask[0,:,1]])
+		#print(joiner_out[0,:,1][mask[0,:,1]])
+		#print(aligned_gestures[0,:,1].long()[mask[0,:,1]])
 		type_emission_accuracy = (mask[:,:,1]*(aligned_gestures[:,:,1].long() == (joiner_out[:,:,1] > 0).long())).sum()/mask[:,:,1].sum()
-		print("type emission accuracy: %f" % type_emission_accuracy)
+		#print("type emission accuracy: %f" % type_emission_accuracy)
 		transition_accuracy = (mask[:,:,0]*(aligned_gestures[:,:,0].long() == (joiner_out[:,:,0] > 0).long())).sum()/mask[:,:,0].sum()
-		print("transition accuracy: %f" % transition_accuracy)
+		#print("transition accuracy: %f" % transition_accuracy)
 		return (transition_losses.sum() + type_emission_losses.sum() + location_emission_losses.sum()) / batch_size
 
+	def on_stage_start(self, stage, epoch):
+		"""Gets called at the beginning of each epoch"""
+		self.batch_count = 0
+
+		# if stage != sb.Stage.TRAIN:
+		# 	self.cer_metric = self.hparams.cer_computer()
+		# 	self.wer_metric = self.hparams.error_rate_computer()
+
 	def on_stage_end(self, stage, stage_loss, epoch):
-		print("yay!")
+		"""Gets called at the end of a epoch."""
+		# Compute/store important stats
+		stage_stats = {"loss": stage_loss}
+		if stage == sb.Stage.TRAIN:
+			self.train_stats = stage_stats
+		# else:
+		# 	stage_stats["CER"] = self.cer_metric.summarize("error_rate")
+		# 	stage_stats["WER"] = self.wer_metric.summarize("error_rate")
+		# 	stage_stats["SER"] = self.wer_metric.summarize("SER")
+
+		# Perform end-of-iteration things, like annealing, logging, etc.
+		if stage == sb.Stage.VALID:
+			# old_lr, new_lr = self.hparams.lr_annealing(stage_stats["SER"])
+			# sb.nnet.schedulers.update_learning_rate(self.optimizer, new_lr)
+			self.hparams.train_logger.log_stats(
+				# stats_meta={"epoch": epoch, "lr": old_lr},
+				stats_meta={"epoch": epoch},
+				train_stats=self.train_stats,
+				valid_stats=stage_stats,
+			)
+			self.checkpointer.save_and_keep_only(
+				# meta={"SER": stage_stats["SER"]}, min_keys=["SER"],
+				meta={"loss": stage_stats["loss"]}, min_keys=["loss"],
+			)
+		elif stage == sb.Stage.TEST:
+			self.hparams.train_logger.log_stats(
+				stats_meta={"Epoch loaded": self.hparams.epoch_counter.current},
+				test_stats=stage_stats,
+			)
+			# with open(self.hparams.wer_file, "w") as w:
+			# 	self.wer_metric.write_stats(w)
 
 def prepare_data(hparams):
 	data_folder = hparams["data_folder"]
 	train_data = sb.dataio.dataset.DynamicItemDataset.from_csv(
-		csv_path=hparams["train_csv"], #replacements={"data_root": data_folder},
+		csv_path=data_folder + "/" + hparams["train_csv"], #replacements={"data_root": data_folder},
 	)
-	datasets = [train_data]
+	valid_data = sb.dataio.dataset.DynamicItemDataset.from_csv(
+                csv_path=data_folder + "/" + hparams["valid_csv"], #replacements={"data_root": data_folder},
+        )
+	test_data = sb.dataio.dataset.DynamicItemDataset.from_csv(
+                csv_path=data_folder + "/" + hparams["test_csv"], #replacements={"data_root": data_folder},
+        )
+	datasets = [train_data, valid_data, test_data]
 	# audio
 	@sb.utils.data_pipeline.takes("wav")
 	@sb.utils.data_pipeline.provides("sig")
@@ -287,18 +263,29 @@ def prepare_data(hparams):
 		datasets,
 		["id", "sig", "vid", "aligned_gestures", "unaligned_gestures"]
 	)
-	return train_data
+	return train_data, valid_data, test_data
 
 
 hparams_file, run_opts, overrides = sb.parse_arguments(sys.argv[1:])
 with open(hparams_file) as fin:
 	hparams = load_hyperpyyaml(fin, overrides)
-train_data = prepare_data(hparams)
+train_data, valid_data, test_data = prepare_data(hparams)
 
-# modules = {"model": torch.nn.Linear(in_features=10 , out_features=10) }
-modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
-brain = AGI(modules, lambda x: torch.optim.Adam(x, 3e-4), hparams=hparams, run_opts=run_opts)
-brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
-brain.fit(epoch_counter=range(15), train_set=train_data, train_loader_kwargs=hparams["train_dataloader_opts"])
+sb.create_experiment_directory(
+	experiment_directory=hparams["output_folder"],
+	hyperparams_to_save=hparams_file,
+	overrides=overrides,
+)
+
+#modules = {"encoder": Encoder(), "predictor": Predictor(output_dim=3), "joiner": Joiner(num_outputs=4), "normalize": sb.processing.features.InputNormalization(norm_type="global")}
+brain = AGI(
+	hparams["modules"],
+	lambda x: torch.optim.Adam(x, 3e-4),
+	hparams=hparams,
+	run_opts=run_opts,
+	checkpointer=hparams["checkpointer"],
+)
+#brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
+brain.fit(epoch_counter=brain.hparams.epoch_counter, train_set=train_data, valid_set=valid_data, train_loader_kwargs=hparams["train_dataloader_opts"])
 #brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
 

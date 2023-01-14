@@ -1,9 +1,44 @@
-data_folder: /Users/lorenlugosch/AndroidStudioProjects/timers-and-such-backup
-train_csv: with-gestures.csv
+#data_folder: /Users/lorenlugosch/AndroidStudioProjects/timers-and-such-backup
+data_folder: /home/mila/l/lugoschl/data/timers-and-such
+output_folder: default-output-folder
+save_folder: !ref <output_folder>/save
+train_csv: train-real-with-gestures.csv
+valid_csv: dev-real-with-gestures.csv
+test_csv: test-real-with-gestures.csv
 batch_size: 2
 train_dataloader_opts:
     # num_workers: 2
     batch_size: !ref <batch_size>
+
+number_of_epochs: 15
+epoch_counter: !new:speechbrain.utils.epoch_loop.EpochCounter
+    limit: !ref <number_of_epochs>
+
+encoder: !new:models.Encoder
+predictor: !new:models.Predictor
+    output_dim: 3
+joiner: !new:models.Joiner
+    num_outputs: 4
+normalize: !new:speechbrain.processing.features.InputNormalization
+    norm_type: global
+
+modules:
+    encoder: !ref <encoder>
+    predictor: !ref <predictor>
+    joiner: !ref <joiner>
+    normalize: !ref <normalize>
+
+model: !new:torch.nn.ModuleList
+    - [!ref <encoder>, !ref <predictor>, !ref <joiner>, !ref <normalize>]
+
+train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
+    save_file: !ref <output_folder>/train-log.txt
+
+checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
+    checkpoints_dir: !ref <save_folder>
+    recoverables:
+        model: !ref <model>
+        counter: !ref <epoch_counter>
 
 compute_features: !new:speechbrain.lobes.features.Fbank
     sample_rate: 16000
