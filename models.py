@@ -37,7 +37,6 @@ class Encoder(torch.nn.Module):
 				if self.use_video_dropout:
 					video_features = self.video_dropout(video_features)
 				if self.no_video:
-					print("here!")
 					video_features = 0 * video_features
 				video_features = video_features.reshape(batch_size, video_T, 128)
 				out = torch.cat([audio_features, video_features], dim=2)
