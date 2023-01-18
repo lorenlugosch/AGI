@@ -3,18 +3,20 @@ import torch
 encoder_dim = 1024
 predictor_dim = 1024
 joiner_dim = 1024
-audio_dim = 80
-audio_frames_per_video_frame = 10 #4
-#mctct
+#audio_dim = 68 #80
+#audio_frames_per_video_frame = 1 #10 #4
 
 # adapted from https://github.com/lorenlugosch/transducer-tutorial/blob/main/transducer_tutorial_example.ipynb
 class Encoder(torch.nn.Module):
-		def __init__(self):
+		def __init__(self, use_video_dropout, no_video, no_audio, text_as_input, audio_frames_per_video_frame):
 				super(Encoder, self).__init__()
-				self.combine = torch.nn.Linear(audio_dim*audio_frames_per_video_frame + 128, encoder_dim)
+				self.audio_dim = 80 if not text_as_input else 68
+				self.use_video_dropout = use_video_dropout; self.no_audio = no_audio; self.no_video = no_video; self.audio_frames_per_video_frame = audio_frames_per_video_frame
+				self.combine = torch.nn.Linear(self.audio_dim*self.audio_frames_per_video_frame + 128, encoder_dim)
 				# self.audio_encoder = 
 				self.video_encoder = torch.nn.Conv2d(in_channels=3, out_channels=128, stride=7, kernel_size=7)
-				#self.video_dropout = torch.nn.Dropout(p=0.5)
+				if self.use_video_dropout:
+					self.video_dropout = torch.nn.Dropout(p=0.5)
 				self.rnn = torch.nn.LSTM(input_size=encoder_dim, hidden_size=encoder_dim, num_layers=3, batch_first=True, bidirectional=False, dropout=0.15)
 				self.linear = torch.nn.Linear(encoder_dim, joiner_dim)
 
@@ -23,14 +25,20 @@ class Encoder(torch.nn.Module):
 				video_T = video.shape[1]
 				audio_features = audio #self.audio_encoder(audio)
 				audio_T = audio_features.shape[1]
-				pad_ = (video_T*audio_frames_per_video_frame) - audio_T
+				pad_ = (video_T*self.audio_frames_per_video_frame) - audio_T
 				audio_features = torch.nn.functional.pad(audio_features, (0,0,0,pad_))
-				audio_features = audio_features.reshape(batch_size, video_T, audio_dim*audio_frames_per_video_frame)
+				audio_features = audio_features.reshape(batch_size, video_T, self.audio_dim*self.audio_frames_per_video_frame)
+				if self.no_audio:
+					audio_features = 0 * audio_features
 
 				video = video.reshape(-1, 3, 630, 300)
 				video_features = self.video_encoder(video)
 				video_features = video_features.max(dim=2)[0].max(dim=2)[0]
-				#video_features = self.video_dropout(video_features)
+				if self.use_video_dropout:
+					video_features = self.video_dropout(video_features)
+				if self.no_video:
+					print("here!")
+					video_features = 0 * video_features
 				video_features = video_features.reshape(batch_size, video_T, 128)
 				out = torch.cat([audio_features, video_features], dim=2)
 				out = self.combine(out)

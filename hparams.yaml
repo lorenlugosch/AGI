@@ -10,11 +10,22 @@ train_dataloader_opts:
     # num_workers: 2
     batch_size: !ref <batch_size>
 
+use_video_dropout: true
+no_video: false
+no_audio: false
+text_as_input: true
+#10 for audio, 4 for M-CTC-T output
+audio_frames_per_video_frame: 1 
 number_of_epochs: 15
 epoch_counter: !new:speechbrain.utils.epoch_loop.EpochCounter
     limit: !ref <number_of_epochs>
 
 encoder: !new:models.Encoder
+    use_video_dropout: !ref <use_video_dropout>
+    no_video: !ref <no_video>
+    no_audio: !ref <no_audio>
+    text_as_input: !ref <text_as_input>
+    audio_frames_per_video_frame: !ref <audio_frames_per_video_frame>
 predictor: !new:models.Predictor
     output_dim: 3
 joiner: !new:models.Joiner

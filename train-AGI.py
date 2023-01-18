@@ -1,4 +1,5 @@
 # python train-AGI.py hparams.yaml --batch_size=2 --output_folder=<whatever>
+# python train-AGI.py hparams.yaml --batch_size=2 --output_folder=experiments/decoding --text_as_input=true --audio_frames_per_video_frame=1 --no_video=false --no_audio=false --use_video_dropout=true
 import torch
 import speechbrain as sb
 import numpy as np
@@ -6,13 +7,6 @@ import sys
 from hyperpyyaml import load_hyperpyyaml
 import struct
 import torchvision
-
-#encoder_dim = 1024
-#predictor_dim = 1024
-#joiner_dim = 1024
-#audio_dim = 80
-#audio_frames_per_video_frame = 10 #4
-#mctct
 
 def greedy_search(encoder_out, predictor, joiner):
 	y_batch = []
@@ -37,7 +31,7 @@ def greedy_search(encoder_out, predictor, joiner):
 					h_t_u[0,2].item() if DOWN else -1.,
 					h_t_u[0,3].item() if DOWN else -1.
 				])
-				if b == 0: print(t); print(DOWN); print(h_t_u);
+				#if b == 0: print(t); print(DOWN); print(h_t_u);
 				y.append(y_u)
 		#print(y)
 		y_batch.append(y[1:]) # remove start symbol
@@ -75,11 +69,11 @@ class AGI(sb.Brain):
 		audio,audio_lens = batch.sig
 		audio = self.hparams.compute_features(audio)
 		audio = self.modules.normalize(audio,audio_lens)
-		encoder_out = self.modules.encoder(audio,video)
-
-		#print(batch.unaligned_gestures[0][0])
-		#greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
-		#sys.exit()
+		text,text_lens = batch.text
+		if self.hparams.text_as_input:
+			encoder_out = self.modules.encoder(text,video)
+		else:
+			encoder_out = self.modules.encoder(audio,video)
 
 		unaligned_gestures = batch.unaligned_gestures[0]
 		batch_size = unaligned_gestures.shape[0]
@@ -90,6 +84,14 @@ class AGI(sb.Brain):
 		aligned_gestures = batch.aligned_gestures[0]
 		aligned_encoder_out, aligned_predictor_out = self.compute_aligned_features(encoder_out, predictor_out, aligned_gestures)
 		joiner_out = self.modules.joiner(aligned_encoder_out, aligned_predictor_out)
+
+		if stage == sb.Stage.VALID and self.batch_count == 0:
+			decoded_gestures = greedy_search(encoder_out, self.modules.predictor, self.modules.joiner)
+			print(decoded_gestures[0])
+			print(unaligned_gestures[0])
+			print(len(decoded_gestures[0]))
+			print(len(unaligned_gestures[0]))
+
 		return joiner_out
 
 	def compute_objectives(self, predictions, batch, stage):
@@ -177,6 +179,15 @@ def prepare_data(hparams):
 		return sig
 	sb.dataio.dataset.add_dynamic_item(datasets, audio_pipeline)
 
+	# text
+	@sb.utils.data_pipeline.takes("transcription")
+	@sb.utils.data_pipeline.provides("text")
+	def text_pipeline(transcription):
+		alphabet_and_numbers = list("_ abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.'-")
+		dense = torch.tensor([alphabet_and_numbers.index(char) for char in transcription])
+		return torch.nn.functional.one_hot(dense, len(alphabet_and_numbers))
+	sb.dataio.dataset.add_dynamic_item(datasets, text_pipeline)
+
 	# screen
 	@sb.utils.data_pipeline.takes("screens")
 	@sb.utils.data_pipeline.provides("vid")
@@ -261,7 +272,7 @@ def prepare_data(hparams):
 
 	sb.dataio.dataset.set_output_keys(
 		datasets,
-		["id", "sig", "vid", "aligned_gestures", "unaligned_gestures"]
+		["id", "sig", "text", "vid", "aligned_gestures", "unaligned_gestures"]
 	)
 	return train_data, valid_data, test_data
 
@@ -285,6 +296,7 @@ brain = AGI(
 	run_opts=run_opts,
 	checkpointer=hparams["checkpointer"],
 )
+print(brain.modules.encoder)
 #brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
 brain.fit(epoch_counter=brain.hparams.epoch_counter, train_set=train_data, valid_set=valid_data, train_loader_kwargs=hparams["train_dataloader_opts"])
 #brain.modules.encoder = torch.load("encoder.pt"); brain.modules.predictor = torch.load("predictor.pt"); brain.modules.joiner = torch.load("joiner.pt"); brain.modules.normalize = torch.load("normalize.pt")
